@@ -1,0 +1,6 @@
+@ClashRoyaleApiGateway_HostAddress = http://localhost:5273
+
+GET {{ClashRoyaleApiGateway_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
