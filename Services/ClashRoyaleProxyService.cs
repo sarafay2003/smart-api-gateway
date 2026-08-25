@@ -1,37 +1,50 @@
 ﻿using System.Net.Http.Headers;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ClashRoyaleApiGateway.Services;
 
-/// <summary>
-/// Handles making the actual outgoing HTTP calls to the real Clash Royale API.
-/// This is the "upstream" call - everything else in the gateway (caching,
-/// rate limiting) will wrap around this.
-/// </summary>
 public class ClashRoyaleProxyService
 {
     private readonly HttpClient _httpClient;
+    private readonly IMemoryCache _cache;
+    private readonly SimpleRateLimiter _rateLimiter;
     private readonly string _apiKey;
     private readonly string _baseUrl;
 
-    public ClashRoyaleProxyService(HttpClient httpClient, IConfiguration configuration)
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(60);
+
+    public ClashRoyaleProxyService(
+        HttpClient httpClient,
+        IMemoryCache cache,
+        SimpleRateLimiter rateLimiter,
+        IConfiguration configuration)
     {
         _httpClient = httpClient;
+        _cache = cache;
+        _rateLimiter = rateLimiter;
         _apiKey = configuration["ThirdPartyApi:ApiKey"]
             ?? throw new InvalidOperationException("ThirdPartyApi:ApiKey is not configured.");
         _baseUrl = configuration["ThirdPartyApi:BaseUrl"]
             ?? throw new InvalidOperationException("ThirdPartyApi:BaseUrl is not configured.");
     }
 
-    /// <summary>
-    /// Fetches a player's profile from the real Clash Royale API.
-    /// Tags starting with '#' need to be URL-encoded as %23.
-    /// </summary>
     public async Task<string> GetPlayerAsync(string playerTag)
     {
         if (!playerTag.StartsWith("#"))
         {
             playerTag = "#" + playerTag;
         }
+
+        var cacheKey = $"player:{playerTag}";
+
+        if (_cache.TryGetValue(cacheKey, out string? cachedResponse))
+        {
+            return cachedResponse!;
+        }
+
+        // Wait for permission before making the real outgoing call -
+        // this is what actually enforces the rate limit.
+        await _rateLimiter.WaitAsync();
 
         var encodedTag = playerTag.Replace("#", "%23");
         var url = $"{_baseUrl}/players/{encodedTag}";
@@ -42,6 +55,10 @@ public class ClashRoyaleProxyService
         var response = await _httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadAsStringAsync();
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        _cache.Set(cacheKey, responseBody, CacheDuration);
+
+        return responseBody;
     }
 }
