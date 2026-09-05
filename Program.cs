@@ -6,9 +6,10 @@ builder.Services.AddHttpClient<ClashRoyaleProxyService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton(new SimpleRateLimiter(maxCallsPerSecond: 5));
 builder.Services.AddControllers();
-
+builder.Services.AddSingleton<GatewayMetrics>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddSingleton<GatewayMetrics>();
 
 var app = builder.Build();
 

@@ -8,6 +8,7 @@ public class ClashRoyaleProxyService
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
     private readonly SimpleRateLimiter _rateLimiter;
+    private readonly GatewayMetrics _metrics;
     private readonly string _apiKey;
     private readonly string _baseUrl;
 
@@ -17,11 +18,13 @@ public class ClashRoyaleProxyService
         HttpClient httpClient,
         IMemoryCache cache,
         SimpleRateLimiter rateLimiter,
+        GatewayMetrics metrics,
         IConfiguration configuration)
     {
         _httpClient = httpClient;
         _cache = cache;
         _rateLimiter = rateLimiter;
+        _metrics = metrics;
         _apiKey = configuration["ThirdPartyApi:ApiKey"]
             ?? throw new InvalidOperationException("ThirdPartyApi:ApiKey is not configured.");
         _baseUrl = configuration["ThirdPartyApi:BaseUrl"]
@@ -30,6 +33,8 @@ public class ClashRoyaleProxyService
 
     public async Task<string> GetPlayerAsync(string playerTag)
     {
+        _metrics.RecordRequest();
+
         if (!playerTag.StartsWith("#"))
         {
             playerTag = "#" + playerTag;
@@ -39,8 +44,11 @@ public class ClashRoyaleProxyService
 
         if (_cache.TryGetValue(cacheKey, out string? cachedResponse))
         {
+            _metrics.RecordCacheHit();
             return cachedResponse!;
         }
+
+        _metrics.RecordCacheMiss();
 
         // Wait for permission before making the real outgoing call -
         // this is what actually enforces the rate limit.
