@@ -1,12 +1,12 @@
 ﻿using System.Net.Http.Headers;
-using Microsoft.Extensions.Caching.Memory;
+using StackExchange.Redis;
 
 namespace ClashRoyaleApiGateway.Services;
 
 public class ClashRoyaleProxyService
 {
     private readonly HttpClient _httpClient;
-    private readonly IMemoryCache _cache;
+    private readonly IConnectionMultiplexer _redis;
     private readonly SimpleRateLimiter _rateLimiter;
     private readonly GatewayMetrics _metrics;
     private readonly string _apiKey;
@@ -16,13 +16,13 @@ public class ClashRoyaleProxyService
 
     public ClashRoyaleProxyService(
         HttpClient httpClient,
-        IMemoryCache cache,
+        IConnectionMultiplexer redis,
         SimpleRateLimiter rateLimiter,
         GatewayMetrics metrics,
         IConfiguration configuration)
     {
         _httpClient = httpClient;
-        _cache = cache;
+        _redis = redis;
         _rateLimiter = rateLimiter;
         _metrics = metrics;
         _apiKey = configuration["ThirdPartyApi:ApiKey"]
@@ -41,8 +41,10 @@ public class ClashRoyaleProxyService
         }
 
         var cacheKey = $"player:{playerTag}";
+        var db = _redis.GetDatabase();
 
-        if (_cache.TryGetValue(cacheKey, out string? cachedResponse))
+        var cachedResponse = await db.StringGetAsync(cacheKey);
+        if (cachedResponse.HasValue)
         {
             _metrics.RecordCacheHit();
             return cachedResponse!;
@@ -50,8 +52,6 @@ public class ClashRoyaleProxyService
 
         _metrics.RecordCacheMiss();
 
-        // Wait for permission before making the real outgoing call -
-        // this is what actually enforces the rate limit.
         await _rateLimiter.WaitAsync();
 
         var encodedTag = playerTag.Replace("#", "%23");
@@ -65,7 +65,7 @@ public class ClashRoyaleProxyService
 
         var responseBody = await response.Content.ReadAsStringAsync();
 
-        _cache.Set(cacheKey, responseBody, CacheDuration);
+        await db.StringSetAsync(cacheKey, responseBody, CacheDuration);
 
         return responseBody;
     }

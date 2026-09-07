@@ -8,8 +8,6 @@ the official Clash Royale API as a real, working example third-party API to
 demonstrate the pattern end-to-end, but the gateway's design is generic and
 not tied to that API specifically.
 
-![Screenshot placeholder - add a Swagger UI screenshot here](docs/screenshot.png)
-
 ## The problem it solves
 
 Third-party APIs are often rate-limited, slow, or have usage caps. If every

@@ -1,4 +1,5 @@
 using ClashRoyaleApiGateway.Services;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +11,9 @@ builder.Services.AddSingleton<GatewayMetrics>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<GatewayMetrics>();
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(
+    ConnectionMultiplexer.Connect("localhost:6379"));
 
 var app = builder.Build();
 
